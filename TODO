@@ -1,0 +1,84 @@
+train과 test데이터를 나누는 방법
+1. 사람에 따라 나누기 (transfer learning)
+2. timestep에 따라 나누기
+
+구하고자 하는 것 나눠서 구할지 정하기
+1. 입력: FSR data 출력: 힘, 입력: FSR data / mass 출력: 좌표
+2. 입력: FSR data, FSR data / mass 출력: 힘, 좌표
+* scaling을 잘 한다면 FSR / mass 데이터를 안 써도 될 것 같다.
+* 일단은 1번대로 힘만 예측
+
+좌표의 null값 처리
+1. 평균
+2. 0d
+
+모델
+1. CNN, LSTM, CNN-LSTM, LSTM-CNN, Random Forest
+
+scaling 방법
+1. train데이터셋 전체에 대하여 minmax(0, 1), standard, robust
+2. 좌표에만 추가로 minmax(-1, 1)을 고려해볼 수도.
+
+----------------------------------------------------
+
+실험
+Sat May 27 11-16-34 2023
+LSTM, force only, transfer, no scaler
+
+Sat May 27 15-38-03 2023
+CNN_LSTM, force only, transfer, no scaler
+
+----------------------------------------------------
+
+아이디어
+1. F-Scan을 이용해 구한 각 지점마다의 힘 데이터를 통해 CNN-LSTM
+2. F-Scan데이터를 오토인코더로 매니폴드 러닝, (사람의 발은 모두 비슷하게 생겼고, 생활할 때도 발을 비슷하게 사용하기 때문에 매니폴드는 확실히 작을 것으로 예상). FSR data로 저차원의 매니폴드를 예측함으로써 정확도를 향상할 수 있지 않을까 + F-Scan데이터 전체를 활용하지 못하는 현재의 문제 해결 + 출력으로 6개 지점의 힘이 아닌 F-Scan의 결과가 나옴
+
+----------------------------------------------------
+
+말할 거
+1. SCAN의 경우 논문에서의 설명대로라면 서있는 상태에서 무게중심을 돌리다가 앞뒤로도 움직여야 하는데 몇몇 데이터는 돌리기만 하고 앞뒤로 움직이지는 않음
+2. 논문에서의 설명과 달리 E센서와 F센서가 바뀌었고, x축과 y축이 바뀜
+
+----------------------------------------------------
+
+실험 정리
+1. Adagrad는 업데이트량이 에폭이 커질수록 계속 작아지는 특징 때문인지 같은 학습률의 다른 optimizer를 사용했을 때보다 수렴이 느렸음
+2. SGD는 gradient explode가 발생하지 않음, Adam에서는 종종 발생
+3. Adam의 성능이 제일 좋았음
+4. transfer learning 방법도 기존의 방법과 비교했을 때 rmse가 비슷한 정도로 수렴했음
+5. LSTM 레이어 수는 1일때가 가장 좋았음
+
+----------------------------------------------------
+
+질문할 거
+1. LSTM의 초기 hidden_state와 cell_state를 초기화하는 방식. 보통 어떻게 하는지. normal_(0, 1)으로 초기화했을 땐 gradient explode가 났는데 pytorch기본값인 0으로 초기화하니 나지 않았음 (항상 안 나는 건 아님)
+L1Norm 상황에 따라 다름
+gradient clipping 해볼만 한 거
+
+2. 딥러닝에서 입력 값이 레이어를 타고 흐르면서 연산되는 값이, 양수인지 음수인지가 지니는 의미가 있는지.
+* 왜 이미지분야에서 pooling은 min pooling은 거의 안쓰지만 max pooling만 하는지
+* 왜 이미지 픽셀을 minmax스케일링을 할 때 (-1, 1)으로 하지 않고 (0, 1)로만 하는지
+* 모든 활성함수가 우함수가 아니라는 점 때문에 입력값을
+* 예를 들면 값이 크면 클수록 중요한 값을 가리키는게 맞는지, 아니면 절대값이 크면 클수록 중요한 값인 건지.
+
+----------------------------------------------------
+
+버그
+1. optimizer의 exp_avg와 exp_avg_sq의 값이 튀면서 모든 파라미터가 nan이 되는 현상
+* 하이퍼파라미터 상태는 아래와 같았음.
+```python
+    seed_everything(42)
+    num_epoch = 100
+
+    hidden_size = 8
+    num_layer = 4
+    model = LSTM(input_size, hidden_size, num_layer, output_size)
+    
+    learning_rate = 0.166806755734981
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, num_epoch)
+    criterion = torch.nn.MSELoss()
+```
+* LSTM의 처음 hidden_state와 cell_state는 normal_(0, 1)이었음
+* LSTM의 처음 hidden_state와 cell_state를 0으로만 채워진 텐서를 넣으니 (pytorch의 디폴트) 값이 튀긴 하지만 nan으로 바뀌진 않았음.
