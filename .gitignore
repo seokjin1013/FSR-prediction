@@ -2,7 +2,6 @@ __pycache__
 data
 test.ipynb
 test.py
-old
 log
 optuna_result
 parameters

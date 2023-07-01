@@ -1,5 +1,5 @@
 from data import *
-from model import *
+from fsr_model import *
 from train import *
 from utils import *
 import torch.utils.data
