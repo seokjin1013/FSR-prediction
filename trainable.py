@@ -23,16 +23,26 @@ class Trainable(ray.tune.Trainable):
         optimizer_args = config['optimizer_args']
         scaler = config['scaler']
 
-        self.model = self._import_class(model)(**model_args)
+        train_indexes, test_indexes = datasource.get_index_splited_by_time(data)
+        self.scaler_X = self._import_class(scaler)()
+        self.scaler_y = self._import_class(scaler)()
+
+        index_X = 'FSR_for_force'
+        index_y = 'force'
+        data_X = data[index_X]
+        data_y = data[index_y]
+        concated_train_indexes = np.concatenate(train_indexes)
+        self.scaler_X.fit(data_X.loc[concated_train_indexes])
+        self.scaler_y.fit(data_X.loc[concated_train_indexes])
+        data.loc[:, index_X] = self.scaler_X.transform(data_X)
+        data.loc[:, index_y] = self.scaler_y.transform(data_y)
+        train_dataset = datasource.FSRDataset(data_X, data_y, train_indexes)
+        test_dataset = datasource.FSRDataset(data_X, data_y, test_indexes)
+
+        self.model = self._import_class(model)(input_size=len(data_X.columns), output_size=len(data_y.columns), **model_args)
         self.criterion = self._import_class(criterion)()
         self.optimizer = self._import_class(optimizer)(self.model.parameters(), **optimizer_args)
 
-        train_index, test_index = datasource.get_index_splited_by_time(data)
-        scaler = self._import_class(scaler)()
-        data[:] = scaler.fit_transform(data)
-        train_dataset = datasource.FSRDataset(data['FSR_for_force'], data['force'], train_index)
-        test_dataset = datasource.FSRDataset(data['FSR_for_force'], data['force'], test_index)
-        
         self.train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=None)
         self.test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=None)
     
@@ -49,9 +59,11 @@ class Trainable(ray.tune.Trainable):
             mae, mse, mape, num = [], [], [], []
             for X, y in self.test_loader:
                 pred = self.model(X)
-                mae.append(sklearn.metrics.mean_absolute_error(y, pred.cpu().detach()))
-                mse.append(sklearn.metrics.mean_squared_error(y, pred.cpu().detach()))
-                mape.append(sklearn.metrics.mean_absolute_percentage_error(y, pred.cpu().detach()))
+                pred = self.scaler_y.inverse_transform(pred)
+                y = self.scaler_y.inverse_transform(y)
+                mae.append(sklearn.metrics.mean_absolute_error(y, pred))
+                mse.append(sklearn.metrics.mean_squared_error(y, pred))
+                mape.append(sklearn.metrics.mean_absolute_percentage_error(y, pred))
                 num.append(len(y))
             mae = np.average(mae, weights=num)
             mse = np.average(mse, weights=num)
