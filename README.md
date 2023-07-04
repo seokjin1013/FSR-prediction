@@ -1,3 +1,20 @@
+## FSR Data Prediction
+
+This is a neural network learning project aimed at obtaining accurate results without the need for expensive equipment when measuring the pressure applied to the soles of the feet in various situations. It allows obtaining results measured through F-Scan using 6 FSR sensors.
+
+Ref: https://www.mdpi.com/1424-8220/18/12/4349
+
+## Structure
+
+name          | information
+--------------|------------
+data          | preprocessed data
+eda           | data eda
+fsr_data      | data loading process
+fsr_model     | deep learning model (implemented pytorch)
+fsr_trainable | training process (implemented ray)
+task*         | hyper parameter tuning process
+
 ## Environment
 
 Windows10 22H2
