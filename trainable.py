@@ -1,3 +1,4 @@
+from typing import Dict
 import ray.tune
 import datasource
 import torch
