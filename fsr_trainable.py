@@ -30,6 +30,7 @@ class FSR_Trainable(ray.tune.Trainable):
         data_loader = config.get('data_loader')
 
         data, train_indexes, test_indexes = self._import_class(data_loader)()
+        data = data.copy()
         concated_train_indexes = np.concatenate(train_indexes)
         if imputer:
             self.imputer = self._import_class(imputer)(**config['imputer_args'])
@@ -62,7 +63,7 @@ class FSR_Trainable(ray.tune.Trainable):
             loss.backward()
             self.optimizer.step()
         self.model.eval()
-        with torch.no_grad():
+        with torch.inference_mode():
             mae, mse, mape, num = [], [], [], []
             for X, y in self.test_loader:
                 pred = self.model(X)
@@ -78,6 +79,20 @@ class FSR_Trainable(ray.tune.Trainable):
             mape = np.average(mape, weights=num)
             rmse = mse ** 0.5
         return {'rmse': rmse, 'mae':mae, 'mape':mape}
+    
+
+    def eval(self):
+        self.model.eval()
+        with torch.inference_mode():
+            results = []
+            for X, y in self.test_loader:
+                pred = self.model(X).detach().cpu().numpy()
+                y = y.detach().cpu().numpy()
+                if self.config.get('scaler'):
+                    pred = self.scaler_y.inverse_transform(pred)
+                    y = self.scaler_y.inverse_transform(y)
+                results.append((pred, y))
+        return results
 
 
     def save_checkpoint(self, tmp_checkpoint_dir):

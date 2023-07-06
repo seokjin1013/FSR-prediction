@@ -62,3 +62,17 @@ def get_index_splited_by_time(test_size=None):
         train_indexes.append(train_index)
         test_indexes.append(test_index)
     return data, train_indexes, test_indexes
+
+
+def get_index_splited_by_subject(test_size=None):
+    from sklearn.model_selection import train_test_split
+    file_data = get_file_data()
+    data = get_data()
+    train_subjects, test_subjects = train_test_split(file_data['subject'].unique(), test_size=test_size, shuffle=False)
+    train_indexes = []
+    test_indexes = []
+    for i in file_data[file_data['subject'].isin(train_subjects)].index:
+        train_indexes.append(data[data['id'] == i].index)
+    for i in file_data[file_data['subject'].isin(test_subjects)].index:
+        test_indexes.append(data[data['id'] == i].index)
+    return data, train_indexes, test_indexes

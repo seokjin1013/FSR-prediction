@@ -15,6 +15,10 @@ fsr_model     | deep learning model (implemented pytorch)
 fsr_trainable | training process (implemented ray)
 task*         | hyper parameter tuning process
 
+## Tuning Result
+
+https://wandb.ai/seokjin/FSR-prediction?workspace=user-seokjin
+
 ## Environment
 
 Windows10 22H2
@@ -22,6 +26,8 @@ Windows10 22H2
 WSL Ubuntu 22.04.2
 
 python 3.10.12
+
+torch 2.0.1
 
 ray[all] 2.5
 
