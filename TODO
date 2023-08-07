@@ -33,6 +33,56 @@ scaling 방법
 
 ----------------------------------------------------
 
+실험 목록
+
+task123 = 시간을 기준으로 나눔
+task456 = 피실험자를 기준으로 나눔
+task14 = 힘과 좌표를 동시에 예측
+task25 = 힘 예측
+task36 = 좌표 예측
+
+----------------------------------------------------
+
+중요한 사항
+
+ANN, LSTM, CNN-LSTM을 모두 paramspace에 넣고 hyperparameter tuning을 하면 ASHAScheduler를 사용했을 때 대부분 ANN으로 수렴함
+하지만 LSTM, CNN-LSTM만을 paramspace에 넣고 hyperparameter tuning을 하면 ASHAScheduler를 동일하게 사용했을 때 LSTM으로 수렴함
+또한 LSTM을 통해 수렴된 RMSE가 더 낮음
+LSTM이 ANN에 비해 수렴시키기는 어렵지만 수렴이 된다면 더 좋은 성능을 내는 모델인 것 같고 그래서 ANN으로 local minima에 빠지는 것 같음
+
+근거
+1. task1은 LSTM으로, task23456은 ANN으로 수렴함
+2. 시계열 데이터에서 RNN도 아닌 LSTM보다 ANN이 우세할리는 없다고 생각하여 의심함
+3. task1을 다시 돌려봄, ANN으로 수렴(아래 링크) rmse는 115.822
+https://wandb.ai/seokjin/FSR-prediction/groups/FSR_Trainable_2023-07-07_08-54-05/workspace?workspace=user-seokjin
+4. task1에서 ANN을 빼고 돌려봄, LSTM으로 수렴(아래 링크) rmse는 91.067
+https://wandb.ai/seokjin/FSR-prediction/groups/FSR_Trainable_2023-07-07_09-33-36/table?workspace=user-seokjin
+5. 3번에서 수행한 실험은 더이상 ANN외에 거의 시도해보지를 않음
+
+개선 실험
++ ANN, LSTM, CNN-LSTM을 따로따로 실험해본다
++ PBT 계열의 스케쥴러를 사용한다
+  한정된 자원으로 최대한의 튜닝을 이끌어내는 ASHAScheduler는 탐험을 하지 않음, 한 번 ANN으로 수렴되기 시작하면 항상 ANN만 탐색함
+
+-참고- 스케쥴러 종류
+  Population Based Training(2017)
+  Population Based Bandits(2020)
+  HyperBand(2016)
+  Asynchronus HyperBand(2018)
+  HyperBand for BOHB(2018)
+
+---------------------------------------------------
+
+정리
+
++ PBT의 경우 탐색하려는 hyperparameter가 branching이 필요한 경우 사용할 수 없다.
++ PB2의 경우 탐색하려는 hyperparameter가 categorical data인 경우 사용할 수 없다.
++ 결국 branching, categorical data 모두에 사용할 수 있는 optuna search가 가장 범용적
+
++ branching을 모두 없애고 PBT를 적용해보려 하였으나 작동하지 않아 보류하였다. 그냥 모델 별로 다시 튜닝하는 것만 시도해봄
+
+----------------------------------------------------
+
 실험 정리
 1. Adagrad는 업데이트량이 에폭이 커질수록 계속 작아지는 특징 때문인지 같은 학습률의 다른 optimizer를 사용했을 때보다 수렴이 느렸음
 2. SGD는 gradient explode가 발생하지 않음, Adam에서는 종종 발생

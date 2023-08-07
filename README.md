@@ -19,6 +19,13 @@ task*         | hyper parameter tuning process
 
 https://wandb.ai/seokjin/FSR-prediction?workspace=user-seokjin
 
+## Result Summary
+model   |  task1|  task2|  task3|  task4|  task5|  task6
+--------|------:|------:|------:|------:|------:|------:
+ANN     |115.526|200.127| 0.6551|105.363|184.365| **0.6716**
+CNN-LSTM| 97.911|178.705| **0.5428**|**103.112**|**175.383**| 0.6782
+LSTM    |**97.267**|**155.939**| 0.5864|111.187|188.688| 0.6762
+
 ## Environment
 
 Windows10 22H2
