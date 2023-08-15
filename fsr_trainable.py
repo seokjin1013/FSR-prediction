@@ -63,22 +63,61 @@ class FSR_Trainable(ray.tune.Trainable):
             loss.backward()
             self.optimizer.step()
         self.model.eval()
+        result = {}
         with torch.inference_mode():
             mae, mse, mape, num = [], [], [], []
+            tmae, tmse, tmape = [], [], []
             for X, y in self.test_loader:
                 pred = self.model(X)
+                tmae.append(sklearn.metrics.mean_absolute_error(y, pred, multioutput='raw_values'))
+                tmse.append(sklearn.metrics.mean_squared_error(y, pred, multioutput='raw_values'))
+                tmape.append(sklearn.metrics.mean_absolute_percentage_error(y, pred, multioutput='raw_values'))
                 if self.config.get('scaler'):
                     pred = self.scaler_y.inverse_transform(pred)
                     y = self.scaler_y.inverse_transform(y)
-                mae.append(sklearn.metrics.mean_absolute_error(y, pred))
-                mse.append(sklearn.metrics.mean_squared_error(y, pred))
-                mape.append(sklearn.metrics.mean_absolute_percentage_error(y, pred))
+                mae.append(sklearn.metrics.mean_absolute_error(y, pred, multioutput='raw_values'))
+                mse.append(sklearn.metrics.mean_squared_error(y, pred, multioutput='raw_values'))
+                mape.append(sklearn.metrics.mean_absolute_percentage_error(y, pred, multioutput='raw_values'))
                 num.append(len(y))
-            mae = np.average(mae, weights=num)
-            mse = np.average(mse, weights=num)
-            mape = np.average(mape, weights=num)
-            rmse = mse ** 0.5
-        return {'rmse': rmse, 'mae':mae, 'mape':mape}
+            mae = np.array(mae)
+            mse = np.array(mse)
+            mape = np.array(mape)
+            tmae = np.array(tmae)
+            tmse = np.array(tmse)
+            tmape = np.array(tmape)
+            if len(mae[0]) == 6:
+                result['tmae_force'] = np.average(np.average(tmae, axis=1), weights=num)
+                result['trmse_force'] = np.average(np.average(tmse, axis=1), weights=num) ** 0.5
+                result['tmape_force'] = np.average(np.average(tmape, axis=1), weights=num)
+                result['mae_force'] = np.average(np.average(mae, axis=1), weights=num)
+                result['rmse_force'] = np.average(np.average(mse, axis=1), weights=num) ** 0.5
+                result['mape_force'] = np.average(np.average(mape, axis=1), weights=num)
+                result['metric'] = result['trmse_force']
+            elif len(mae[0]) == 12:
+                result['tmae_coord'] = np.average(np.average(tmae, axis=1), weights=num)
+                result['trmse_coord'] = np.average(np.average(tmse, axis=1), weights=num) ** 0.5
+                result['tmape_coord'] = np.average(np.average(tmape, axis=1), weights=num)
+                result['mae_coord'] = np.average(np.average(mae, axis=1), weights=num)
+                result['rmse_coord'] = np.average(np.average(mse, axis=1), weights=num) ** 0.5
+                result['mape_coord'] = np.average(np.average(mape, axis=1), weights=num)
+                result['metric'] = result['trmse_coord']
+            elif len(mae[0]) == 18:
+                result['tmae_force'] = np.average(np.average(tmae[:, :6], axis=1), weights=num)
+                result['trmse_force'] = np.average(np.average(tmse[:, :6], axis=1), weights=num) ** 0.5
+                result['tmape_force'] = np.average(np.average(tmape[:, :6], axis=1), weights=num)
+                result['tmae_coord'] = np.average(np.average(tmae[:, 6:], axis=1), weights=num)
+                result['trmse_coord'] = np.average(np.average(tmse[:, 6:], axis=1), weights=num) ** 0.5
+                result['tmape_coord'] = np.average(np.average(tmape[:, 6:], axis=1), weights=num)
+                result['mae_force'] = np.average(np.average(mae[:, :6], axis=1), weights=num)
+                result['rmse_force'] = np.average(np.average(mse[:, :6], axis=1), weights=num) ** 0.5
+                result['mape_force'] = np.average(np.average(mape[:, :6], axis=1), weights=num)
+                result['mae_coord'] = np.average(np.average(mae[:, 6:], axis=1), weights=num)
+                result['rmse_coord'] = np.average(np.average(mse[:, 6:], axis=1), weights=num) ** 0.5
+                result['mape_coord'] = np.average(np.average(mape[:, 6:], axis=1), weights=num)
+                result['metric'] = result['trmse_force'] + result['trmse_coord']
+            else:
+                assert 'output should be only 6 or 12 or 18'
+        return result
     
 
     def eval(self):

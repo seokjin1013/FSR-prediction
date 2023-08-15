@@ -20,11 +20,39 @@ task*         | hyper parameter tuning process
 https://wandb.ai/seokjin/FSR-prediction?workspace=user-seokjin
 
 ## Result Summary
-model   |  task1|  task2|  task3|  task4|  task5|  task6
---------|------:|------:|------:|------:|------:|------:
-ANN     |115.526|200.127| 0.6551|105.363|184.365| **0.6716**
-CNN-LSTM| 97.911|178.705| **0.5428**|**103.112**|**175.383**| 0.6782
-LSTM    |**97.267**|**155.939**| 0.5864|111.187|188.688| 0.6762
+
+### predict force RMSE
+
+model   |  task1|  task2|  task4|  task5
+--------|------:|------:|------:|------:
+ANN     |200.373|200.127|177.361|184.365
+CNN-LSTM|203.214|178.705|171.708|175.383
+LSTM    |192.334|155.939|179.106|188.688
+
+### predict coord RMSE
+
+model   |  task1|  task3|  task4|  task6
+--------|------:|------:|------:|------:
+ANN     |  0.943| 0.6551|  0.974| 0.6716
+CNN-LSTM|  0.927| 0.5428|  1.022| 0.6782
+LSTM    |  0.901| 0.5864|  1.005| 0.6762
+
+### simulation result
+
+<p align='middle'>
+  <img src='images/train_result_task1_cnn_lstm.png' width='40%' />
+  <img src='images/train_result_task1_lstm.png' width='40%' />
+  <img src='images/train_result_task4_cnn_lstm.png' width='40%' />
+  <img src='images/train_result_task4_lstm.png' width='40%' />
+</p>
+
+### hyperparameter tuning result
+
+<p align='middle'>
+  <img src='images/tuning_result_scaler_force.png' width='40%' />
+  <img src='images/tuning_result_scaler_coord.png' width='40%' />
+  <img src='images/tuning_result_imputer.png' width='40%' />
+</p>
 
 ## Environment
 
