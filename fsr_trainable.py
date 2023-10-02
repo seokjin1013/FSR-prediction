@@ -21,7 +21,7 @@ class FSR_Trainable(ray.tune.Trainable):
         index_X = config['index_X']
         index_y = config['index_y']
         model = config['model']
-        model_args = config['model_args']
+        model_args = config.get('model_args', {})
         criterion = config['criterion']
         optimizer = config['optimizer']
         optimizer_args = config['optimizer_args']
@@ -30,24 +30,24 @@ class FSR_Trainable(ray.tune.Trainable):
         data_loader = config.get('data_loader')
 
         data, train_indexes, test_indexes = self._import_class(data_loader)()
-        data = data.copy()
+        self.data = data.copy()
         concated_train_indexes = np.concatenate(train_indexes)
         if imputer:
             self.imputer = self._import_class(imputer)(**config['imputer_args'])
             index_Xy = (index_X if isinstance(index_X, list) else [index_X]) + (index_y if isinstance(index_y, list) else [index_y])
-            self.imputer.fit(data.loc[concated_train_indexes, index_Xy])
-            data.loc[:, index_Xy] = self.imputer.transform(data.loc[:, index_Xy])
+            self.imputer.fit(self.data.loc[concated_train_indexes, index_Xy])
+            self.data.loc[:, index_Xy] = self.imputer.transform(self.data.loc[:, index_Xy])
         if scaler:
             self.scaler_X = self._import_class(scaler)()
             self.scaler_y = self._import_class(scaler)()
-            self.scaler_X.fit(data.loc[concated_train_indexes, index_X])
-            self.scaler_y.fit(data.loc[concated_train_indexes, index_y])
-            data.loc[:, index_X] = self.scaler_X.transform(data.loc[:, index_X])
-            data.loc[:, index_y] = self.scaler_y.transform(data.loc[:, index_y])
-        train_dataset = fsr_data.FSRDataset(data.loc[:, index_X], data.loc[:, index_y], train_indexes)
-        test_dataset = fsr_data.FSRDataset(data.loc[:, index_X], data.loc[:, index_y], test_indexes)
+            self.scaler_X.fit(self.data.loc[concated_train_indexes, index_X])
+            self.scaler_y.fit(self.data.loc[concated_train_indexes, index_y])
+            self.data.loc[:, index_X] = self.scaler_X.transform(self.data.loc[:, index_X])
+            self.data.loc[:, index_y] = self.scaler_y.transform(self.data.loc[:, index_y])
+        train_dataset = fsr_data.FSRDataset(self.data.loc[:, index_X], self.data.loc[:, index_y], train_indexes)
+        test_dataset = fsr_data.FSRDataset(self.data.loc[:, index_X], self.data.loc[:, index_y], test_indexes)
 
-        self.model = self._import_class(model)(input_size=len(data.loc[:, index_X].columns), output_size=len(data.loc[:, index_y].columns), **model_args)
+        self.model = self._import_class(model)(input_size=len(self.data.loc[:, index_X].columns), output_size=len(self.data.loc[:, index_y].columns), **model_args)
         self.criterion = self._import_class(criterion)()
         self.optimizer = self._import_class(optimizer)(self.model.parameters(), **optimizer_args)
         self.train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=None)
@@ -135,11 +135,50 @@ class FSR_Trainable(ray.tune.Trainable):
 
 
     def save_checkpoint(self, tmp_checkpoint_dir):
-        checkpoint_path = os.path.join(tmp_checkpoint_dir, "model.pth")
-        torch.save(self.model.state_dict(), checkpoint_path)
+        model_path = os.path.join(tmp_checkpoint_dir, "model.pth")
+        optimizer_path = os.path.join(tmp_checkpoint_dir, "optimizer.pth")
+        torch.save(self.model.state_dict(), model_path)
+        torch.save(self.optimizer.state_dict(), optimizer_path)
         return tmp_checkpoint_dir
     
 
     def load_checkpoint(self, tmp_checkpoint_dir):
-        checkpoint_path = os.path.join(tmp_checkpoint_dir, "model.pth")
-        self.model.load_state_dict(torch.load(checkpoint_path))
+        model_path = os.path.join(tmp_checkpoint_dir, "model.pth")
+        optimizer_path = os.path.join(tmp_checkpoint_dir, "optimizer.pth")
+        self.model.load_state_dict(torch.load(model_path))
+        self.optimizer.load_state_dict(torch.load(optimizer_path))
+
+
+    def reset_config(self, new_config: Dict):
+        del self.imputer, self.scaler_X, self.scaler_y, self.model, self.criterion, self.optimizer
+        index_X = new_config['index_X']
+        index_y = new_config['index_y']
+        model = new_config['model']
+        model_args = new_config['model_args']
+        criterion = new_config['criterion']
+        optimizer = new_config['optimizer']
+        optimizer_args = new_config['optimizer_args']
+        imputer = new_config.get('imputer')
+        scaler = new_config.get('scaler')
+        data_loader = new_config.get('data_loader')
+
+        data, train_indexes, test_indexes = self._import_class(data_loader)()
+        self.data.loc[:] = data
+        concated_train_indexes = np.concatenate(train_indexes)
+        if imputer:
+            self.imputer = self._import_class(imputer)(**new_config['imputer_args'])
+            index_Xy = (index_X if isinstance(index_X, list) else [index_X]) + (index_y if isinstance(index_y, list) else [index_y])
+            self.imputer.fit(self.data.loc[concated_train_indexes, index_Xy])
+            self.data.loc[:, index_Xy] = self.imputer.transform(self.data.loc[:, index_Xy])
+        if scaler:
+            self.scaler_X = self._import_class(scaler)()
+            self.scaler_y = self._import_class(scaler)()
+            self.scaler_X.fit(self.data.loc[concated_train_indexes, index_X])
+            self.scaler_y.fit(self.data.loc[concated_train_indexes, index_y])
+            self.data.loc[:, index_X] = self.scaler_X.transform(self.data.loc[:, index_X])
+            self.data.loc[:, index_y] = self.scaler_y.transform(self.data.loc[:, index_y])
+
+        self.model = self._import_class(model)(input_size=len(self.data.loc[:, index_X].columns), output_size=len(self.data.loc[:, index_y].columns), **model_args)
+        self.criterion = self._import_class(criterion)()
+        self.optimizer = self._import_class(optimizer)(self.model.parameters(), **optimizer_args)
+        return True
