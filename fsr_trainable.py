@@ -144,9 +144,15 @@ class FSR_Trainable(ray.tune.Trainable):
 
     def load_checkpoint(self, tmp_checkpoint_dir):
         model_path = os.path.join(tmp_checkpoint_dir, "model.pth")
+        if os.path.exists(model_path):
+            self.model.load_state_dict(torch.load(model_path))
+        else:
+            print('not found model state dict')
         optimizer_path = os.path.join(tmp_checkpoint_dir, "optimizer.pth")
-        self.model.load_state_dict(torch.load(model_path))
-        self.optimizer.load_state_dict(torch.load(optimizer_path))
+        if os.path.exists(optimizer_path):
+            self.optimizer.load_state_dict(torch.load(optimizer_path))
+        else:
+            print('not found optimizer state dict')
 
 
     def reset_config(self, new_config: Dict):
