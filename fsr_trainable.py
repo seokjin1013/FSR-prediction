@@ -114,7 +114,7 @@ class FSR_Trainable(ray.tune.Trainable):
                 result['mae_coord'] = np.average(np.average(mae[:, 6:], axis=1), weights=num)
                 result['rmse_coord'] = np.average(np.average(mse[:, 6:], axis=1), weights=num) ** 0.5
                 result['mape_coord'] = np.average(np.average(mape[:, 6:], axis=1), weights=num)
-                result['metric'] = result['trmse_force'] + result['trmse_coord']
+                result['metric'] = (result['trmse_force'] + result['trmse_coord']) / 2
             else:
                 assert 'output should be only 6 or 12 or 18'
         return result
@@ -123,15 +123,17 @@ class FSR_Trainable(ray.tune.Trainable):
     def eval(self):
         self.model.eval()
         with torch.inference_mode():
-            results = []
+            preds = []
+            ys = []
             for X, y in self.test_loader:
                 pred = self.model(X).detach().cpu().numpy()
                 y = y.detach().cpu().numpy()
                 if self.config.get('scaler'):
                     pred = self.scaler_y.inverse_transform(pred)
                     y = self.scaler_y.inverse_transform(y)
-                results.append((pred, y))
-        return results
+                preds.append(pred)
+                ys.append(y)
+        return pred, y
 
 
     def save_checkpoint(self, tmp_checkpoint_dir):
@@ -147,12 +149,12 @@ class FSR_Trainable(ray.tune.Trainable):
         if os.path.exists(model_path):
             self.model.load_state_dict(torch.load(model_path))
         else:
-            print('not found model state dict')
+            ray.logger.warning('not found model state dict')
         optimizer_path = os.path.join(tmp_checkpoint_dir, "optimizer.pth")
         if os.path.exists(optimizer_path):
             self.optimizer.load_state_dict(torch.load(optimizer_path))
         else:
-            print('not found optimizer state dict')
+            ray.logger.warning('not found optimizer state dict')
 
 
     def reset_config(self, new_config: Dict):
@@ -188,3 +190,199 @@ class FSR_Trainable(ray.tune.Trainable):
         self.criterion = self._import_class(criterion)()
         self.optimizer = self._import_class(optimizer)(self.model.parameters(), **optimizer_args)
         return True
+    
+
+from typing import Literal, List
+def define_searchspace(model_names:List[Literal['fsr_model.ANN', 'fsr_model.CNN_LSTM', 'fsr_model.LSTM']],
+                       index_X:List[Literal['FSR_for_force', 'FSR_for_coord']],
+                       index_Y:List[Literal['force', 'x_coord', 'y_coord']],
+                       data_loader:Literal['fsr_data.get_index_splited_by_time', 'fsr_data.get_index_splited_by_subject']):
+    def inner(trial):
+        model = trial.suggest_categorical('model', model_names)
+        if model == 'fsr_model.ANN':
+            trial.suggest_categorical('model_args/hidden_size', [8, 16, 32, 64, 128])
+            trial.suggest_int('model_args/num_layer', 1, 8)
+        elif model == 'fsr_model.CNN_LSTM':
+            trial.suggest_categorical('model_args/cnn_hidden_size', [8, 16, 32, 64, 128])
+            trial.suggest_categorical('model_args/lstm_hidden_size', [8, 16, 32, 64, 128])
+            trial.suggest_int('model_args/cnn_num_layer', 1, 8)
+            trial.suggest_int('model_args/lstm_num_layer', 1, 8)
+        elif model == 'fsr_model.LSTM':
+            trial.suggest_categorical('model_args/hidden_size', [8, 16, 32, 64, 128])
+            trial.suggest_int('model_args/num_layer', 1, 8)
+
+        trial.suggest_categorical('criterion', ['torch.nn.MSELoss'])
+        trial.suggest_categorical('optimizer', [
+            'torch.optim.Adam',
+            'torch.optim.NAdam',
+            'torch.optim.Adagrad',
+            'torch.optim.RAdam',
+            'torch.optim.SGD',
+        ])
+        trial.suggest_float('optimizer_args/lr', 1e-5, 1e-1, log=True)
+        imputer = trial.suggest_categorical('imputer', ['sklearn.impute.SimpleImputer'])
+        if imputer == 'sklearn.impute.SimpleImputer':
+            trial.suggest_categorical('imputer_args/strategy', [
+                'mean',
+                'median',
+            ])
+        trial.suggest_categorical('scaler', [ 
+            'sklearn.preprocessing.StandardScaler',
+            'sklearn.preprocessing.MinMaxScaler',
+            'sklearn.preprocessing.RobustScaler',
+        ])
+        return {
+            'index_X': index_X,
+            'index_y': index_Y,
+            'data_loader': data_loader
+        }
+    return inner
+
+
+from typing import Literal, List
+class SearchSpace:
+    def __init__(self, model_names:List[Literal['fsr_model.ANN', 'fsr_model.CNN_LSTM', 'fsr_model.LSTM']],
+                       index_X:List[Literal['FSR_for_force', 'FSR_for_coord']],
+                       index_Y:List[Literal['force', 'x_coord', 'y_coord']],
+                       data_loader:Literal['fsr_data.get_index_splited_by_time', 'fsr_data.get_index_splited_by_subject']):
+        self.model_names = model_names
+        self.index_X = index_X
+        self.index_Y = index_Y
+        self.data_loader = data_loader
+
+    def __call__(self, trial):
+        model = trial.suggest_categorical('model', self.model_names)
+        if model == 'fsr_model.ANN':
+            trial.suggest_categorical('model_args/hidden_size', [8, 16, 32, 64, 128])
+            trial.suggest_int('model_args/num_layer', 1, 8)
+        elif model == 'fsr_model.CNN_LSTM':
+            trial.suggest_categorical('model_args/cnn_hidden_size', [8, 16, 32, 64, 128])
+            trial.suggest_categorical('model_args/lstm_hidden_size', [8, 16, 32, 64, 128])
+            trial.suggest_int('model_args/cnn_num_layer', 1, 8)
+            trial.suggest_int('model_args/lstm_num_layer', 1, 8)
+        elif model == 'fsr_model.LSTM':
+            trial.suggest_categorical('model_args/hidden_size', [8, 16, 32, 64, 128])
+            trial.suggest_int('model_args/num_layer', 1, 8)
+
+        trial.suggest_categorical('criterion', ['torch.nn.MSELoss'])
+        trial.suggest_categorical('optimizer', [
+            'torch.optim.Adam',
+            'torch.optim.NAdam',
+            'torch.optim.Adagrad',
+            'torch.optim.RAdam',
+            'torch.optim.SGD',
+        ])
+        trial.suggest_float('optimizer_args/lr', 1e-5, 1e-1, log=True)
+        imputer = trial.suggest_categorical('imputer', ['sklearn.impute.SimpleImputer'])
+        if imputer == 'sklearn.impute.SimpleImputer':
+            trial.suggest_categorical('imputer_args/strategy', [
+                'mean',
+                'median',
+            ])
+        trial.suggest_categorical('scaler', [ 
+            'sklearn.preprocessing.StandardScaler',
+            'sklearn.preprocessing.MinMaxScaler',
+            'sklearn.preprocessing.RobustScaler',
+        ])
+        return {
+            'index_X': self.index_X,
+            'index_y': self.index_Y,
+            'data_loader': self.data_loader
+        }
+
+import ray.tune
+import ray.air
+import ray.air.integrations.wandb
+import ray.tune.schedulers
+import ray.tune.search
+import ray.tune.search.optuna
+
+def get_tuner(searchspace, wandb_project, cpu_num=2):
+    return ray.tune.Tuner(
+        trainable=ray.tune.with_resources(
+            FSR_Trainable, {'cpu':cpu_num},
+        ),
+        tune_config=ray.tune.TuneConfig(
+            num_samples=100,
+            scheduler=ray.tune.schedulers.ASHAScheduler(
+                max_t=100,
+                grace_period=1,
+                reduction_factor=2,
+                brackets=1,
+                metric='metric',
+                mode='min',
+            ),
+            search_alg=ray.tune.search.optuna.OptunaSearch(
+                space=searchspace,
+                metric='metric',
+                mode='min',
+            ),
+        ), 
+        run_config=ray.air.RunConfig(
+            callbacks=[
+                ray.air.integrations.wandb.WandbLoggerCallback(project=wandb_project),
+            ],
+            checkpoint_config=ray.air.CheckpointConfig(
+                num_to_keep=3,
+                checkpoint_score_attribute='metric',
+                checkpoint_score_order='min',
+                checkpoint_frequency=5,
+                checkpoint_at_end=True,
+            ),
+        ), 
+    )
+
+def get_tuner_PBT(searchspace, wandb_project, cpu_num=2):
+    return ray.tune.Tuner(
+        trainable=ray.tune.with_resources(
+            FSR_Trainable, {'cpu':2},
+        ),
+        tune_config=ray.tune.TuneConfig(
+            num_samples=4,
+            reuse_actors=True,
+            scheduler=ray.tune.schedulers.PopulationBasedTraining(
+                time_attr='time_total_s',
+                perturbation_interval=5,
+                metric='metric',
+                mode='min',
+                hyperparam_mutations={
+                    'model':['fsr_model.ANN'],
+                    'model_args':{
+                        'hidden_size':[8],
+                        'num_layer':[1],
+                    },
+                    'criterion':['torch.nn.MSELoss'],
+                    'optimizer':[
+                        'torch.optim.NAdam',
+                    ],
+                    'optimizer_args':{
+                        'lr':ray.tune.loguniform(1e-5, 1e-1),
+                    },
+                    'imputer':['sklearn.impute.SimpleImputer'],
+                    'imputer_args':{
+                        'strategy':['mean', 'median'],
+                    },
+                    'scaler':[ 
+                        'sklearn.preprocessing.StandardScaler',
+                        'sklearn.preprocessing.MinMaxScaler',
+                        'sklearn.preprocessing.RobustScaler',
+                    ],
+                    'index_X': [['FSR_for_force', 'FSR_for_coord']],
+                    'index_y': [['force', 'x_coord', 'y_coord']],
+                    'data_loader': ['fsr_data.get_index_splited_by_time']
+                },
+            ),
+        ), 
+        run_config=ray.air.RunConfig(
+            callbacks=[
+                ray.air.integrations.wandb.WandbLoggerCallback(project='FSR-prediction'),
+            ],
+            checkpoint_config=ray.air.CheckpointConfig(
+                num_to_keep=3,
+                checkpoint_score_attribute='metric',
+                checkpoint_score_order='min',
+                checkpoint_frequency=5,
+                checkpoint_at_end=True,
+            ),
+        ), 
+    )

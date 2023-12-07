@@ -1,5 +1,28 @@
 import torch
 
+
+class ANN(torch.nn.Module):
+    def __init__(self, input_size, hidden_size, num_layer, output_size):
+        super().__init__()
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.num_layer = num_layer
+        self.output_size = output_size
+        layer_sizes = [[hidden_size, hidden_size] for i in range(num_layer)]
+        layer_sizes[0][0] = input_size
+        layer_sizes[-1][1] = output_size
+        layer = []
+        for i, (layer_in, layer_out) in enumerate(layer_sizes):
+            layer.append(torch.nn.Linear(layer_in, layer_out))
+            if i < len(layer_sizes) - 1:
+                layer.append(torch.nn.Tanh())
+        self.layers = torch.nn.Sequential(*layer)
+    
+    def forward(self, x):
+        x = self.layers(x)
+        return x
+
+
 class LSTM(torch.nn.Module):
     def __init__(self, input_size, hidden_size, num_layer, output_size):
         super().__init__()
@@ -37,25 +60,6 @@ class CNN_LSTM(torch.nn.Module):
         x = x.transpose(-1, -2)
         x, _ = self.lstm_encoder(x)
         x = self.decoder(x)
-        return x
-
-
-class ANN(torch.nn.Module):
-    def __init__(self, input_size, hidden_size, num_layer, output_size):
-        super().__init__()
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.num_layer = num_layer
-        self.output_size = output_size
-        layers = [[hidden_size, hidden_size] for i in range(num_layer)]
-        layers[0][0] = input_size
-        layers[-1][1] = output_size
-        self.layers = torch.nn.Sequential(*[
-            torch.nn.Linear(layer[0], layer[1]) for layer in layers
-        ])
-    
-    def forward(self, x):
-        x = self.layers(x)
         return x
 
 
